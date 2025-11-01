@@ -1,0 +1,10 @@
+{
+  "name": "cloudgaming",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "control-panel"
+  ],
+  "description": "Cloud gaming monorepo"
+}
+
