@@ -25,8 +25,9 @@ EXPOSE 3001
 # Set default environment variables
 ENV PORT=3001
 ENV GPU_UTIL_THRESHOLD=80
-ENV GPU_MEM_THRESHOLD=80
+ENV GPU_MEM_THRESHOLD=50
 ENV CPU_UTIL_THRESHOLD=80
+ENV BUSY_THRESHOLD_PERCENT=60
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \

@@ -9,10 +9,22 @@
 <body>
     <div class="container">
         <h1>Control Panel</h1>
-        <p class="description">Wake up your device</p>
         
+        <!-- Availability Status - Most Prominent -->
+        <div id="availabilityStatus" class="availability-status">
+            <div id="availabilityIcon" class="availability-icon"></div>
+            <div id="availabilityText" class="availability-text">Checking availability...</div>
+        </div>
+        
+        <!-- Metrics Chart -->
+        <div id="metricsChartContainer" class="metrics-chart-container" style="display: none;">
+            <canvas id="metricsChart" class="metrics-chart"></canvas>
+            <div id="metricsLabel" class="metrics-label"></div>
+        </div>
+        
+        <!-- Detailed Status -->
         <div class="status-container">
-            <div class="status-label">Device Status:</div>
+            <div class="status-label">Status Details:</div>
             <div id="statusIndicator" class="status-indicator">
                 <span id="statusText" class="status-text">Checking...</span>
                 <span id="statusDot" class="status-dot"></span>

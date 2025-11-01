@@ -4,6 +4,9 @@ import { dirname, join } from 'path';
 import { wake } from 'wake_on_lan';
 import ping from 'ping';
 
+// Use global fetch if available (Node 18+), otherwise we'll need to handle differently
+const fetch = globalThis.fetch;
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
@@ -11,6 +14,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const MAC_ADDRESS = process.env.MAC_ADDRESS;
 const DEVICE_IP = process.env.DEVICE_IP;
+const HOST_INFO_URL = process.env.HOST_INFO_URL || 'http://localhost:3001';
 
 if (!MAC_ADDRESS) {
   console.error('Error: MAC_ADDRESS environment variable is not set');
@@ -25,7 +29,7 @@ if (!DEVICE_IP) {
 app.use(express.json());
 app.use(express.static(join(__dirname, 'public')));
 
-// Device status endpoint
+// Combined status endpoint - checks ping and host-info metrics
 app.get('/api/status', async (req, res) => {
   if (!DEVICE_IP) {
     return res.status(503).json({
@@ -35,15 +39,83 @@ app.get('/api/status', async (req, res) => {
   }
 
   try {
-    const result = await ping.promise.probe(DEVICE_IP, {
+    // Check ping status
+    const pingResult = await ping.promise.probe(DEVICE_IP, {
       timeout: 2,
       min_reply: 1
     });
 
+    const online = pingResult.alive;
+    const latency = online ? parseFloat(pingResult.time) : null;
+
+    // If online, try to get metrics from host-info
+    let metrics = null;
+    let metricsAvailable = false;
+    
+    if (online) {
+      try {
+        // Use AbortController for timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
+        
+        const metricsResponse = await fetch(`${HOST_INFO_URL}/api/metrics`, {
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (metricsResponse.ok) {
+          metrics = await metricsResponse.json();
+          metricsAvailable = true;
+        }
+      } catch (error) {
+        // Metrics unavailable - host is online but game server not responding
+        metricsAvailable = false;
+      }
+    }
+
+    // Determine availability state
+    let availability = null;
+    let availabilityStatus = null;
+    let statusMessage = null;
+
+    if (!online) {
+      // Host offline - available for wake
+      availability = 'available';
+      availabilityStatus = 'offline_available';
+      statusMessage = 'Host is offline - Available for gaming (can be woken)';
+    } else if (metricsAvailable && metrics.success) {
+      if (!metrics.busy) {
+        // Online and not busy - available
+        availability = 'available';
+        availabilityStatus = 'online_available';
+        statusMessage = 'Host is online and available for gaming';
+      } else {
+        // Online but busy - unavailable
+        availability = 'unavailable';
+        availabilityStatus = 'online_busy';
+        statusMessage = 'Host is busy - Not available for gaming';
+      }
+    } else {
+      // Online but metrics unavailable - game server unavailable
+      availability = 'unavailable';
+      availabilityStatus = 'online_no_metrics';
+      statusMessage = 'Host is online but game server is unavailable';
+    }
+
     res.json({
       success: true,
-      online: result.alive,
-      latency: result.alive ? parseFloat(result.time) : null
+      online,
+      latency,
+      metricsAvailable,
+      metrics: metricsAvailable && metrics ? {
+        busy: metrics.busy,
+        overallUtilization: metrics.overallUtilization,
+        graph: metrics.graph
+      } : null,
+      availability,
+      availabilityStatus,
+      statusMessage
     });
   } catch (error) {
     console.error('Error checking device status:', error);

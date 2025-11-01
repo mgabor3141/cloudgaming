@@ -16,7 +16,8 @@ A simple web application to send Wake-on-LAN packets to devices.
 2. Set environment variables:
    ```bash
    export MAC_ADDRESS=00:11:22:33:44:55
-   export DEVICE_IP=192.168.1.100  # Optional, for status checking
+   export DEVICE_IP=192.168.1.100  # Required for status checking
+   export HOST_INFO_URL=http://localhost:3001  # Optional, defaults to http://localhost:3001
    export PORT=3000  # Optional, defaults to 3000
    ```
 
@@ -24,6 +25,7 @@ A simple web application to send Wake-on-LAN packets to devices.
    ```
    MAC_ADDRESS=00:11:22:33:44:55
    DEVICE_IP=192.168.1.100
+   HOST_INFO_URL=http://localhost:3001
    PORT=3000
    ```
 
@@ -62,16 +64,29 @@ The server will start on `http://localhost:3000` (or the port specified in `PORT
 ### Environment Variables
 
 - `MAC_ADDRESS` (required): The MAC address of the target device in format `XX:XX:XX:XX:XX:XX` or `XX-XX-XX-XX-XX-XX`
-- `DEVICE_IP` (optional): The IP address of the target device for status checking via ping. If not set, status checking will be disabled but wake functionality will still work.
+- `DEVICE_IP` (required): The IP address of the target device for status checking via ping
+- `HOST_INFO_URL` (optional): URL of the host-info service for metrics. Defaults to `http://localhost:3001`
 - `PORT` (optional): Server port, defaults to 3000
 
 ### Usage
 
 1. Open the web interface at `http://localhost:3000`
-2. The device status will be displayed at the top (Online/Offline)
-3. If the device is offline, click the "Wake Device" button
-4. The app will wait for the device to come online and provide confirmation
-5. If the device is already online, the wake button will be disabled
+2. The **availability status** is prominently displayed at the top, showing:
+   - **Available** (green): Host is offline (can be woken) OR online and not busy
+   - **Unavailable** (red): Host is online but busy OR game server unavailable
+3. A small utilization chart shows recent metrics when available
+4. If the host is offline, click the "Wake Device" button
+5. The app will wait for the device to come online and provide confirmation
+6. Detailed status information is shown below the availability status
+
+### Availability States
+
+The control panel displays four distinct states:
+
+- **Host offline**: Available for gaming (can be woken)
+- **Host online + not busy**: Available for gaming
+- **Host online + busy**: Unavailable (system resources in use)
+- **Host online + no metrics**: Game server unavailable (host-info not responding)
 
 ## Host Info
 
@@ -88,16 +103,18 @@ A monitoring service that runs on the host PC to track system metrics and determ
    ```bash
    export PORT=3001  # Optional, defaults to 3001
    export GPU_UTIL_THRESHOLD=80  # Optional, defaults to 80%
-   export GPU_MEM_THRESHOLD=80  # Optional, defaults to 80%
+   export GPU_MEM_THRESHOLD=50  # Optional, defaults to 50%
    export CPU_UTIL_THRESHOLD=80  # Optional, defaults to 80%
+   export BUSY_THRESHOLD_PERCENT=60  # Optional, defaults to 60%
    ```
 
    Or create a `.env` file in the `host-info` directory:
    ```
    PORT=3001
    GPU_UTIL_THRESHOLD=80
-   GPU_MEM_THRESHOLD=80
+   GPU_MEM_THRESHOLD=50
    CPU_UTIL_THRESHOLD=80
+   BUSY_THRESHOLD_PERCENT=60
    ```
 
 ### Running Locally
@@ -132,8 +149,9 @@ The server will start on `http://localhost:3001` (or the port specified in `PORT
      --gpus all \
      -p 3001:3001 \
      -e GPU_UTIL_THRESHOLD=80 \
-     -e GPU_MEM_THRESHOLD=80 \
+     -e GPU_MEM_THRESHOLD=50 \
      -e CPU_UTIL_THRESHOLD=80 \
+     -e BUSY_THRESHOLD_PERCENT=60 \
      --name host-info \
      host-info
    ```
@@ -142,8 +160,9 @@ The server will start on `http://localhost:3001` (or the port specified in `PORT
 
 - `PORT` (optional): Server port, defaults to 3001
 - `GPU_UTIL_THRESHOLD` (optional): GPU utilization threshold percentage, defaults to 80
-- `GPU_MEM_THRESHOLD` (optional): GPU memory usage threshold percentage, defaults to 80
+- `GPU_MEM_THRESHOLD` (optional): GPU memory usage threshold percentage, defaults to 50
 - `CPU_UTIL_THRESHOLD` (optional): CPU utilization threshold percentage, defaults to 80
+- `BUSY_THRESHOLD_PERCENT` (optional): Percentage of samples in the past 5 minutes that must exceed thresholds to be considered busy. Defaults to 60. This prevents brief spikes from marking the system as busy - requires sustained load.
 
 ### API Endpoints
 
@@ -159,8 +178,12 @@ Returns whether the PC is currently "busy" based on whether any metric has excee
   "thresholds": {
     "cpu": 80,
     "gpuUtil": 80,
-    "gpuMem": 80
+    "gpuMem": 50,
+    "busyThresholdPercent": 60
   },
+  "busyPercentage": 15.5,
+  "sampleCount": 30,
+  "busySampleCount": 5,
   "latest": {
     "cpuUtilization": 15.5,
     "gpuUtilization": 0,
@@ -171,7 +194,7 @@ Returns whether the PC is currently "busy" based on whether any metric has excee
 
 #### GET `/api/metrics`
 
-Returns current metrics and busy status.
+Returns current metrics, busy status, and graph data for visualization.
 
 **Response:**
 ```json
@@ -181,9 +204,32 @@ Returns current metrics and busy status.
   "cpuUtilization": 15.5,
   "gpuUtilization": 0,
   "gpuMemoryPercent": 2.3,
-  "busy": false
+  "overallUtilization": 15.5,
+  "busy": false,
+  "busyPercentage": 12.5,
+  "sampleCount": 30,
+  "busySampleCount": 4,
+  "graph": {
+    "dataPoints": [
+      {
+        "timestamp": 1234567800,
+        "utilization": 10.2
+      },
+      {
+        "timestamp": 1234567810,
+        "utilization": 12.5
+      }
+    ],
+    "timeRange": {
+      "start": 1234567500,
+      "end": 1234567890,
+      "durationMs": 300000
+    }
+  }
 }
 ```
+
+The `graph.dataPoints` array contains historical utilization data points suitable for drawing a line graph. Each point includes a timestamp and overall utilization (maximum of CPU and GPU utilization).
 
 #### GET `/health`
 
@@ -196,5 +242,5 @@ The app continuously monitors:
 - **GPU Memory Usage**: Percentage of GPU memory used
 - **CPU Utilization**: System-wide CPU usage
 
-Metrics are collected every 10 seconds and stored in memory for the past 5 minutes. The system is considered "busy" if any of the metrics exceeded their thresholds at any point during the past 5 minutes.
+Metrics are collected every 10 seconds and stored in memory for the past 5 minutes. The system is considered "busy" only if a significant percentage (default 60%) of samples exceeded their thresholds, weighted by recency. More recent samples count exponentially more than older samples, so if the system is busy right now (even if it was idle earlier), it will be marked as busy. This prevents brief spikes from marking the system as busy while also ensuring current load is properly reflected.
 
