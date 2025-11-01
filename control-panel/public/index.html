@@ -24,18 +24,16 @@
         <!-- Status Details - Shows utilization chart if available, otherwise ping status -->
         <div id="metricsChartContainer" class="metrics-chart-container" style="display: none;">
             <canvas id="metricsChart" class="metrics-chart"></canvas>
-            <div id="metricsLabel" class="metrics-label">(last 5 minutes)</div>
+            <div id="metricsLabel" class="metrics-label">last 5 minutes</div>
         </div>
         
         <button id="wakeButton" class="wake-button" disabled>Wake Device</button>
         
         <!-- Notification Toggle -->
-        <div class="notification-control">
-            <label class="notification-toggle">
-                <input type="checkbox" id="notificationToggle">
-                <span class="toggle-label">Notify when host becomes available</span>
-            </label>
-        </div>
+        <label class="notification-toggle">
+            <input type="checkbox" id="notificationToggle">
+            <span class="toggle-label">Notify when host becomes available<br>(keep this page open in the background)</span>
+        </label>
         
         <div id="message" class="message"></div>
     </div>

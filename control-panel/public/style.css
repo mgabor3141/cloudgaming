@@ -22,23 +22,20 @@ body {
     text-align: center;
     max-width: 400px;
     width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
 }
 
 h1 {
     color: #333;
-    margin-bottom: 30px;
     font-size: 2rem;
-}
-
-.description {
-    color: #666;
-    margin-bottom: 20px;
-    font-size: 1rem;
 }
 
 /* Availability Status - Most Prominent */
 .availability-status {
-    margin-bottom: 30px;
     padding: 30px;
     border-radius: 12px;
     background: #f8f9fa;
@@ -93,11 +90,10 @@ h1 {
 
 /* Metrics Chart */
 .metrics-chart-container {
-    margin-bottom: 25px;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 8px;
+    gap: 4px;
 }
 
 .metrics-chart {
@@ -116,13 +112,6 @@ h1 {
     font-weight: 500;
 }
 
-.status-container {
-    margin-bottom: 30px;
-    padding: 15px;
-    background: #f8f9fa;
-    border-radius: 8px;
-}
-
 .status-label {
     font-size: 0.9rem;
     color: #666;
@@ -135,7 +124,6 @@ h1 {
     align-items: center;
     justify-content: center;
     gap: 10px;
-    margin-bottom: 30px;
 }
 
 .status-text {
@@ -196,7 +184,7 @@ h1 {
     max-width: 300px;
 }
 
-.wake-button:hover {
+.wake-button:not(:disabled):hover {
     transform: translateY(-2px);
     box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
 }
@@ -240,18 +228,10 @@ h1 {
     display: block;
 }
 
-/* Notification Control */
-.notification-control {
-    margin-top: 20px;
-    margin-bottom: 15px;
-    padding: 12px;
-    background: #f8f9fa;
-    border-radius: 8px;
-}
-
+/* Notification Toggle */
 .notification-toggle {
     display: flex;
-    align-items: center;
+    align-items: start;
     justify-content: center;
     gap: 10px;
     cursor: pointer;
@@ -269,5 +249,6 @@ h1 {
     font-size: 0.9rem;
     color: #666;
     cursor: pointer;
+    text-align: left;
 }
 

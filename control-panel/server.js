@@ -165,8 +165,9 @@ app.post('/api/wake', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Control Panel server running on http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Control Panel server running on http://0.0.0.0:${PORT}`);
+  console.log(`Server accessible from LAN at http://<your-ip>:${PORT}`);
   console.log(`Target MAC Address: ${MAC_ADDRESS}`);
   if (DEVICE_IP) {
     console.log(`Device IP: ${DEVICE_IP}`);

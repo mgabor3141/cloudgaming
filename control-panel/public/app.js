@@ -241,6 +241,11 @@ function showAvailabilityNotification() {
   });
 }
 
+function checkNotificationSupport() {
+  // Check if browser supports notifications
+  return 'Notification' in window;
+}
+
 function loadNotificationPreference() {
   const saved = localStorage.getItem('notificationsEnabled');
   if (saved === 'true') {
@@ -263,7 +268,7 @@ function updateAvailabilityStatus(data) {
   const { availability, availabilityStatus: status, statusMessage } = data;
 
   availabilityText.textContent = statusMessage || 'Checking...';
-  statusIndicator.style.display = 'block';
+  statusIndicator.style.display = 'flex';
 
   // Check for availability transition: unavailable -> available
   if (
@@ -307,9 +312,18 @@ function updateAvailabilityStatus(data) {
 // Update wake button state
 function updateWakeButtonState(online) {
   if (online || isWaitingForWake) {
-    wakeButton.disabled = true;
-    wakeButton.textContent = online ? 'Device is Awake' : 'Waking...';
+    // Hide button when device is online, show when waking
+    if (online) {
+      wakeButton.style.display = 'none';
+    } else {
+      // Waking - show button but keep disabled
+      wakeButton.style.display = 'block';
+      wakeButton.disabled = true;
+      wakeButton.textContent = 'Waking...';
+    }
   } else {
+    // Device is offline - show and enable button
+    wakeButton.style.display = 'block';
     wakeButton.disabled = false;
     wakeButton.textContent = 'Wake Device';
   }
@@ -505,6 +519,12 @@ function stopStatusPolling() {
 
 // Notification toggle handler
 notificationToggle.addEventListener('change', async (e) => {
+  // Double-check support (shouldn't be reachable if not supported, but safety check)
+  if (!('Notification' in window)) {
+    e.target.checked = false;
+    return;
+  }
+  
   const enabled = e.target.checked;
   
   if (enabled) {
@@ -520,8 +540,15 @@ notificationToggle.addEventListener('change', async (e) => {
   }
 });
 
-// Load notification preference on page load
-loadNotificationPreference();
+// Check notification support and load preference on page load
+// Check support first, before loading preferences
+if (!checkNotificationSupport()) {
+  // Notifications not supported - ensure toggle is hidden
+  notificationToggle.closest('.notification-toggle').style.display = 'none';
+} else {
+  // Notifications supported - load preferences
+  loadNotificationPreference();
+}
 
 // Start polling on page load
 startStatusPolling();
