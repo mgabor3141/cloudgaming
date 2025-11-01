@@ -240,3 +240,34 @@ h1 {
     display: block;
 }
 
+/* Notification Control */
+.notification-control {
+    margin-top: 20px;
+    margin-bottom: 15px;
+    padding: 12px;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+.notification-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.notification-toggle input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: #667eea;
+}
+
+.toggle-label {
+    font-size: 0.9rem;
+    color: #666;
+    cursor: pointer;
+}
+

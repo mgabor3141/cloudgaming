@@ -9,10 +9,13 @@ const availabilityText = document.getElementById('availabilityText');
 const metricsChartContainer = document.getElementById('metricsChartContainer');
 const metricsChart = document.getElementById('metricsChart');
 const metricsLabel = document.getElementById('metricsLabel');
+const notificationToggle = document.getElementById('notificationToggle');
 
 let statusCheckInterval = null;
 let isWaitingForWake = false;
 let wakeWaitController = null; // AbortController for cancelling wait process
+let previousAvailability = null; // Track previous availability state for notifications
+let notificationsEnabled = false; // Whether user has enabled notifications
 
 // Draw mini chart
 function drawChart(dataPoints, timeRange) {
@@ -197,12 +200,82 @@ async function checkDeviceStatus() {
   }
 }
 
+// Notification management
+function checkNotificationPermission() {
+  if (!('Notification' in window)) {
+    console.warn('This browser does not support notifications');
+    return false;
+  }
+  return Notification.permission === 'granted';
+}
+
+async function requestNotificationPermission() {
+  if (!('Notification' in window)) {
+    alert('This browser does not support notifications');
+    return false;
+  }
+
+  if (Notification.permission === 'granted') {
+    return true;
+  }
+
+  if (Notification.permission === 'denied') {
+    alert('Notifications are blocked. Please enable them in your browser settings.');
+    return false;
+  }
+
+  const permission = await Notification.requestPermission();
+  return permission === 'granted';
+}
+
+function showAvailabilityNotification() {
+  if (!notificationsEnabled || !checkNotificationPermission()) {
+    return;
+  }
+
+  new Notification('Host Available', {
+    body: 'The gaming host is now available!',
+    icon: '/favicon.ico',
+    tag: 'host-available',
+    requireInteraction: false,
+  });
+}
+
+function loadNotificationPreference() {
+  const saved = localStorage.getItem('notificationsEnabled');
+  if (saved === 'true') {
+    notificationsEnabled = true;
+    notificationToggle.checked = true;
+    // Request permission if not already granted
+    if (Notification.permission === 'default') {
+      requestNotificationPermission();
+    }
+  }
+}
+
+function saveNotificationPreference(enabled) {
+  localStorage.setItem('notificationsEnabled', enabled ? 'true' : 'false');
+  notificationsEnabled = enabled;
+}
+
 // Update availability status - most prominent display
 function updateAvailabilityStatus(data) {
   const { availability, availabilityStatus: status, statusMessage } = data;
 
   availabilityText.textContent = statusMessage || 'Checking...';
   statusIndicator.style.display = 'block';
+
+  // Check for availability transition: unavailable -> available
+  if (
+    notificationsEnabled &&
+    previousAvailability === 'unavailable' &&
+    availability === 'available'
+  ) {
+    showAvailabilityNotification();
+  }
+
+  // Update previous availability state
+  previousAvailability = availability;
 
   // Remove all status classes
   availabilityStatus.className = 'availability-status';
@@ -418,8 +491,8 @@ function startStatusPolling() {
   // Check immediately
   checkDeviceStatus();
   
-  // Then check every 5 seconds
-  statusCheckInterval = setInterval(checkDeviceStatus, 5000);
+  // Then check every 10 seconds
+  statusCheckInterval = setInterval(checkDeviceStatus, 10_000);
 }
 
 // Stop periodic status checking
@@ -429,6 +502,26 @@ function stopStatusPolling() {
     statusCheckInterval = null;
   }
 }
+
+// Notification toggle handler
+notificationToggle.addEventListener('change', async (e) => {
+  const enabled = e.target.checked;
+  
+  if (enabled) {
+    const permissionGranted = await requestNotificationPermission();
+    if (permissionGranted) {
+      saveNotificationPreference(true);
+    } else {
+      notificationToggle.checked = false;
+      saveNotificationPreference(false);
+    }
+  } else {
+    saveNotificationPreference(false);
+  }
+});
+
+// Load notification preference on page load
+loadNotificationPreference();
 
 // Start polling on page load
 startStatusPolling();
