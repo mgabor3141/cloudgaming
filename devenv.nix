@@ -7,6 +7,7 @@
   # https://devenv.sh/packages/
   packages = [
     pkgs.git
+    pkgs.docker
   ];
 
   dotenv.enable = true;
@@ -29,12 +30,127 @@
       '';
     };
     cpanel = {
-      description = "Start the development server";
+      description = "Start the control-panel development server";
       exec = "npm run dev -w control-panel";
     };
     hostinfo = {
-      description = "Show host information";
+      description = "Start the host-info development server";
       exec = "npm run dev -w host-info";
+    };
+    
+    # Docker build scripts
+    docker-build-control-panel = {
+      description = "Build control-panel Docker image";
+      exec = ''
+        cd control-panel
+        docker build -t control-panel:latest .
+      '';
+    };
+    
+    docker-build-host-info = {
+      description = "Build host-info Docker image";
+      exec = ''
+        cd host-info
+        docker build -t host-info:latest .
+      '';
+    };
+    
+    docker-build = {
+      description = "Build all Docker images";
+      exec = ''
+        echo "Building control-panel..."
+        cd control-panel && docker build -t control-panel:latest . && cd ..
+        echo "Building host-info..."
+        cd host-info && docker build -t host-info:latest . && cd ..
+        echo "All images built successfully"
+      '';
+    };
+    
+    # Docker push scripts for GitHub Container Registry
+    docker-push-control-panel = {
+      description = "Build and push control-panel to GitHub Container Registry";
+      exec = ''
+        set -e
+        if [ -z "$GITHUB_USER" ]; then
+          echo "Error: GITHUB_USER environment variable is not set"
+          echo "Example: export GITHUB_USER=yourusername"
+          exit 1
+        fi
+        
+        REPO_NAME="''${GITHUB_REPO:-cloudgaming}"
+        IMAGE_NAME="ghcr.io/$GITHUB_USER/$REPO_NAME/control-panel"
+        
+        echo "Building control-panel..."
+        cd control-panel
+        docker build -t "$IMAGE_NAME:latest" -t "$IMAGE_NAME:$GITHUB_SHA" .
+        
+        echo "Pushing to $IMAGE_NAME..."
+        docker push "$IMAGE_NAME:latest"
+        if [ -n "$GITHUB_SHA" ]; then
+          docker push "$IMAGE_NAME:$GITHUB_SHA"
+        fi
+        
+        echo "Successfully pushed control-panel"
+      '';
+    };
+    
+    docker-push-host-info = {
+      description = "Build and push host-info to GitHub Container Registry";
+      exec = ''
+        set -e
+        if [ -z "$GITHUB_USER" ]; then
+          echo "Error: GITHUB_USER environment variable is not set"
+          echo "Example: export GITHUB_USER=yourusername"
+          exit 1
+        fi
+        
+        REPO_NAME="''${GITHUB_REPO:-cloudgaming}"
+        IMAGE_NAME="ghcr.io/$GITHUB_USER/$REPO_NAME/host-info"
+        
+        echo "Building host-info..."
+        cd host-info
+        docker build -t "$IMAGE_NAME:latest" -t "$IMAGE_NAME:$GITHUB_SHA" .
+        
+        echo "Pushing to $IMAGE_NAME..."
+        docker push "$IMAGE_NAME:latest"
+        if [ -n "$GITHUB_SHA" ]; then
+          docker push "$IMAGE_NAME:$GITHUB_SHA"
+        fi
+        
+        echo "Successfully pushed host-info"
+      '';
+    };
+    
+    docker-push = {
+      description = "Build and push all images to GitHub Container Registry";
+      exec = ''
+        set -e
+        if [ -z "$GITHUB_USER" ]; then
+          echo "Error: GITHUB_USER environment variable is not set"
+          echo "Example: export GITHUB_USER=yourusername"
+          exit 1
+        fi
+        
+        echo "Building and pushing all images..."
+        devenv docker-push-control-panel
+        devenv docker-push-host-info
+        echo "All images pushed successfully"
+      '';
+    };
+    
+    docker-login = {
+      description = "Login to GitHub Container Registry (requires GITHUB_TOKEN)";
+      exec = ''
+        if [ -z "$GITHUB_TOKEN" ]; then
+          echo "Error: GITHUB_TOKEN environment variable is not set"
+          echo "You can create a token at: https://github.com/settings/tokens"
+          echo "Required scope: write:packages"
+          exit 1
+        fi
+        
+        echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_USER" --password-stdin
+        echo "Logged in to GitHub Container Registry"
+      '';
     };
   };
 
