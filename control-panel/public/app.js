@@ -1,5 +1,6 @@
 const wakeButton = document.getElementById('wakeButton');
 const messageDiv = document.getElementById('message');
+const statusIndicator = document.getElementById('statusIndicator');
 const statusText = document.getElementById('statusText');
 const statusDot = document.getElementById('statusDot');
 const availabilityStatus = document.getElementById('availabilityStatus');
@@ -11,6 +12,7 @@ const metricsLabel = document.getElementById('metricsLabel');
 
 let statusCheckInterval = null;
 let isWaitingForWake = false;
+let wakeWaitController = null; // AbortController for cancelling wait process
 
 // Draw mini chart
 function drawChart(dataPoints, timeRange) {
@@ -161,16 +163,14 @@ async function checkDeviceStatus() {
 
     if (data.success) {
       updateAvailabilityStatus(data);
-      updateDeviceStatus(data.online, data.latency);
       
-      // Draw chart if metrics available
+      // Show utilization info if available, otherwise show ping status
       if (data.metricsAvailable && data.metrics && data.metrics.graph) {
-        drawChart(data.metrics.graph.dataPoints);
-        const util = data.metrics.overallUtilization !== undefined 
-          ? Math.round(data.metrics.overallUtilization) 
-          : 'N/A';
-        metricsLabel.innerHTML = `${util}% average utilization<br/>(last 5 minutes)`;
+        updateUtilizationStatus(data.metrics);
+        drawChart(data.metrics.graph.dataPoints, data.metrics.graph.timeRange);
       } else {
+        // Show ping status (no metrics available)
+        updateDeviceStatus(data.online, data.latency);
         metricsChartContainer.style.display = 'none';
       }
     } else {
@@ -180,16 +180,20 @@ async function checkDeviceStatus() {
         availabilityIcon.className = 'availability-icon unavailable';
         statusText.textContent = 'Status check unavailable';
         statusDot.className = 'status-dot checking';
-        wakeButton.disabled = false;
+        updateWakeButtonState(false);
       } else {
         updateAvailabilityStatus({ availability: 'unavailable', availabilityStatus: 'error' });
-        updateDeviceStatus(false);
+        if (!isWaitingForWake) {
+          updateDeviceStatus(false);
+        }
       }
     }
   } catch (error) {
     console.error('Error checking device status:', error);
     updateAvailabilityStatus({ availability: 'unavailable', availabilityStatus: 'error' });
-    updateDeviceStatus(false);
+    if (!isWaitingForWake) {
+      updateDeviceStatus(false);
+    }
   }
 }
 
@@ -198,6 +202,7 @@ function updateAvailabilityStatus(data) {
   const { availability, availabilityStatus: status, statusMessage } = data;
 
   availabilityText.textContent = statusMessage || 'Checking...';
+  statusIndicator.style.display = 'block';
 
   // Remove all status classes
   availabilityStatus.className = 'availability-status';
@@ -222,39 +227,81 @@ function updateAvailabilityStatus(data) {
     availabilityStatus.classList.add('checking');
     availabilityIcon.classList.add('checking');
     availabilityIcon.textContent = '⋯';
+    statusIndicator.style.display = 'none';
   }
 }
 
-// Update device status display
-function updateDeviceStatus(online, latency = null) {
-  if (online) {
-    statusText.textContent = latency ? `Online (${latency}ms)` : 'Online';
-    statusDot.className = 'status-dot online';
-    
-    // Wake button disabled when online
+// Update wake button state
+function updateWakeButtonState(online) {
+  if (online || isWaitingForWake) {
     wakeButton.disabled = true;
-    wakeButton.textContent = 'Device is Awake';
-    
-    // If we were waiting for wake, show success message
-    if (isWaitingForWake) {
-      isWaitingForWake = false;
-      messageDiv.className = 'message success';
-      messageDiv.textContent = 'Device is now online!';
-      messageDiv.style.display = 'block';
-      setTimeout(() => {
-        messageDiv.style.display = 'none';
-      }, 5000);
-    }
+    wakeButton.textContent = online ? 'Device is Awake' : 'Waking...';
   } else {
-    statusText.textContent = 'Offline';
-    statusDot.className = 'status-dot offline';
     wakeButton.disabled = false;
     wakeButton.textContent = 'Wake Device';
   }
 }
 
+// Show success message when device comes online
+function showWakeSuccess() {
+  if (isWaitingForWake) {
+    isWaitingForWake = false;
+    messageDiv.className = 'message success';
+    messageDiv.textContent = 'Device is now online!';
+    messageDiv.style.display = 'block';
+    setTimeout(() => {
+      messageDiv.style.display = 'none';
+    }, 5000);
+  }
+}
+
+// Update device status display (ping status)
+function updateDeviceStatus(online, latency = null) {
+  if (online) {
+    statusText.textContent = latency ? `Online (${latency}ms)` : 'Online';
+    statusDot.className = 'status-dot online';
+    showWakeSuccess();
+  } else {
+    statusText.textContent = 'Offline';
+    statusDot.className = 'status-dot offline';
+  }
+  updateWakeButtonState(online);
+}
+
+// Update utilization status display
+function updateUtilizationStatus(metrics) {
+  const { overallUtilization, busy } = metrics;
+  
+  const util = overallUtilization !== undefined ? Math.round(overallUtilization) : null;
+  
+  // Build status text with utilization info
+  if (util !== null) {
+    statusText.textContent = `${util}% utilization`;
+  }
+  
+  // Set status dot based on busy status
+  if (busy) {
+    statusDot.className = 'status-dot busy';
+  } else {
+    statusDot.className = 'status-dot online';
+  }
+  
+  // Host is online when we have utilization metrics
+  showWakeSuccess();
+  updateWakeButtonState(true);
+}
+
 // Wait for device to come online after wake signal
 async function waitForDeviceWake(maxWaitTime = 60000, checkInterval = 2000) {
+  // Cancel any existing wait process
+  if (wakeWaitController) {
+    wakeWaitController.abort();
+  }
+  
+  // Create new abort controller for this wait process
+  wakeWaitController = new AbortController();
+  const signal = wakeWaitController.signal;
+  
   const startTime = Date.now();
   isWaitingForWake = true;
   
@@ -262,37 +309,77 @@ async function waitForDeviceWake(maxWaitTime = 60000, checkInterval = 2000) {
   messageDiv.textContent = 'Wake signal sent. Waiting for device to come online...';
   messageDiv.style.display = 'block';
   
-  while (Date.now() - startTime < maxWaitTime) {
-    await new Promise(resolve => setTimeout(resolve, checkInterval));
-    
-    try {
-      const response = await fetch('/api/status');
-      const data = await response.json();
-      
-      if (data.success && data.online) {
-        updateAvailabilityStatus(data);
-        updateDeviceStatus(true, data.latency);
-        return true;
+  try {
+    while (Date.now() - startTime < maxWaitTime) {
+      // Check if cancelled
+      if (signal.aborted) {
+        isWaitingForWake = false;
+        return false;
       }
-    } catch (error) {
-      console.error('Error checking status while waiting:', error);
+      
+      await new Promise((resolve, reject) => {
+        const timeoutId = setTimeout(resolve, checkInterval);
+        signal.addEventListener('abort', () => {
+          clearTimeout(timeoutId);
+          reject(new Error('Wait cancelled'));
+        });
+      });
+      
+      // Check if cancelled after waiting
+      if (signal.aborted) {
+        isWaitingForWake = false;
+        return false;
+      }
+      
+      try {
+        const response = await fetch('/api/status');
+        const data = await response.json();
+        
+        if (data.success && data.online) {
+          updateAvailabilityStatus(data);
+          // Show utilization if available, otherwise ping status
+          if (data.metricsAvailable && data.metrics && data.metrics.graph) {
+            updateUtilizationStatus(data.metrics);
+          } else {
+            updateDeviceStatus(true, data.latency);
+          }
+          isWaitingForWake = false;
+          wakeWaitController = null;
+          return true;
+        }
+      } catch (error) {
+        if (signal.aborted) {
+          isWaitingForWake = false;
+          return false;
+        }
+        console.error('Error checking status while waiting:', error);
+      }
+      
+      // Update message with elapsed time
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      messageDiv.textContent = `Wake signal sent. Waiting for device... (${elapsed}s)`;
     }
     
-    // Update message with elapsed time
-    const elapsed = Math.floor((Date.now() - startTime) / 1000);
-    messageDiv.textContent = `Wake signal sent. Waiting for device... (${elapsed}s)`;
+    // Timeout reached
+    isWaitingForWake = false;
+    wakeWaitController = null;
+    messageDiv.className = 'message error';
+    messageDiv.textContent = 'Wake signal sent, but device did not come online within the timeout period.';
+    return false;
+  } catch (error) {
+    if (error.message === 'Wait cancelled') {
+      // Wait was cancelled, clean up silently
+      isWaitingForWake = false;
+      return false;
+    }
+    throw error;
   }
-  
-  // Timeout reached
-  isWaitingForWake = false;
-  messageDiv.className = 'message error';
-  messageDiv.textContent = 'Wake signal sent, but device did not come online within the timeout period.';
-  return false;
 }
 
 // Handle wake button click
 wakeButton.addEventListener('click', async () => {
-  // Disable button during request
+  if (isWaitingForWake) return;
+  
   wakeButton.disabled = true;
   wakeButton.textContent = 'Waking...';
 
@@ -307,29 +394,22 @@ wakeButton.addEventListener('click', async () => {
     const data = await response.json();
 
     if (data.success) {
-      // Wait for device to come online
       await waitForDeviceWake();
     } else {
       messageDiv.className = 'message error';
       messageDiv.textContent = data.error || 'Failed to send wake signal';
       messageDiv.style.display = 'block';
-      wakeButton.disabled = false;
-      wakeButton.textContent = 'Wake Device';
-      
-      setTimeout(() => {
-        messageDiv.style.display = 'none';
-      }, 5000);
+      updateWakeButtonState(false);
+      setTimeout(() => messageDiv.style.display = 'none', 5000);
     }
   } catch (error) {
-    messageDiv.className = 'message error';
-    messageDiv.textContent = 'Network error: ' + error.message;
-    messageDiv.style.display = 'block';
-    wakeButton.disabled = false;
-    wakeButton.textContent = 'Wake Device';
-    
-    setTimeout(() => {
-      messageDiv.style.display = 'none';
-    }, 5000);
+    if (!isWaitingForWake && error.message !== 'Wait cancelled') {
+      messageDiv.className = 'message error';
+      messageDiv.textContent = 'Network error: ' + error.message;
+      messageDiv.style.display = 'block';
+      setTimeout(() => messageDiv.style.display = 'none', 5000);
+    }
+    updateWakeButtonState(false);
   }
 });
 

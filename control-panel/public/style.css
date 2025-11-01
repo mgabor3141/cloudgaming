@@ -118,7 +118,7 @@ h1 {
 
 .status-container {
     margin-bottom: 30px;
-    padding: 20px;
+    padding: 15px;
     background: #f8f9fa;
     border-radius: 8px;
 }
@@ -135,6 +135,7 @@ h1 {
     align-items: center;
     justify-content: center;
     gap: 10px;
+    margin-bottom: 30px;
 }
 
 .status-text {
@@ -164,6 +165,12 @@ h1 {
 .status-dot.checking {
     background: #ffc107;
     box-shadow: 0 0 8px rgba(255, 193, 7, 0.5);
+}
+
+.status-dot.busy {
+    background: #dc3545;
+    box-shadow: 0 0 8px rgba(220, 53, 69, 0.5);
+    animation: pulse 1s ease-in-out infinite;
 }
 
 @keyframes pulse {
@@ -211,6 +218,12 @@ h1 {
     font-size: 0.95rem;
     min-height: 20px;
     display: none;
+}
+
+.message:not(.success):not(.error) {
+    background: #e7f3ff;
+    color: #004085;
+    border: 1px solid #b8daff;
 }
 
 .message.success {

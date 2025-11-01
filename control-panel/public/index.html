@@ -14,21 +14,17 @@
         <div id="availabilityStatus" class="availability-status">
             <div id="availabilityIcon" class="availability-icon"></div>
             <div id="availabilityText" class="availability-text">Checking availability...</div>
+        </div>  
+        
+        <div id="statusIndicator" class="status-indicator" style="display: none;">
+            <span id="statusText" class="status-text">Checking...</span>
+            <span id="statusDot" class="status-dot"></span>
         </div>
         
-        <!-- Metrics Chart -->
+        <!-- Status Details - Shows utilization chart if available, otherwise ping status -->
         <div id="metricsChartContainer" class="metrics-chart-container" style="display: none;">
             <canvas id="metricsChart" class="metrics-chart"></canvas>
-            <div id="metricsLabel" class="metrics-label"></div>
-        </div>
-        
-        <!-- Detailed Status -->
-        <div class="status-container">
-            <div class="status-label">Status Details:</div>
-            <div id="statusIndicator" class="status-indicator">
-                <span id="statusText" class="status-text">Checking...</span>
-                <span id="statusDot" class="status-dot"></span>
-            </div>
+            <div id="metricsLabel" class="metrics-label">(last 5 minutes)</div>
         </div>
         
         <button id="wakeButton" class="wake-button" disabled>Wake Device</button>
