@@ -10,7 +10,16 @@
     <div class="container">
         <h1>Control Panel</h1>
         <p class="description">Wake up your device</p>
-        <button id="wakeButton" class="wake-button">Wake Device</button>
+        
+        <div class="status-container">
+            <div class="status-label">Device Status:</div>
+            <div id="statusIndicator" class="status-indicator">
+                <span id="statusText" class="status-text">Checking...</span>
+                <span id="statusDot" class="status-dot"></span>
+            </div>
+        </div>
+        
+        <button id="wakeButton" class="wake-button" disabled>Wake Device</button>
         <div id="message" class="message"></div>
     </div>
     <script src="app.js"></script>

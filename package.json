@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "workspaces": [
-    "control-panel"
+    "control-panel",
+    "host-info"
   ],
   "description": "Cloud gaming monorepo"
 }

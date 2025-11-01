@@ -21,9 +21,22 @@
   # services.postgres.enable = true;
 
   # https://devenv.sh/scripts/
-  scripts.hello.exec = ''
-    echo hello from $GREET
-  '';
+  scripts = {
+    hello = {
+      exec = ''
+        npm install
+        echo hello from $GREET
+      '';
+    };
+    cpanel = {
+      description = "Start the development server";
+      exec = "npm run dev -w control-panel";
+    };
+    hostinfo = {
+      description = "Show host information";
+      exec = "npm run dev -w host-info";
+    };
+  };
 
   # https://devenv.sh/basics/
   enterShell = ''

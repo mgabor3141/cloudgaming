@@ -1,5 +1,5 @@
 {
-  "name": "control-panel",
+  "name": "host-info",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -8,9 +8,7 @@
     "dev": "node --watch server.js"
   },
   "dependencies": {
-    "express": "^5.1.0",
-    "wake_on_lan": "^1.0.0",
-    "ping": "^0.4.4"
+    "express": "^5.1.0"
   }
 }
 
