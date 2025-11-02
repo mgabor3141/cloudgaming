@@ -75,9 +75,13 @@ jobs:
       - name: Check for changes
         id: changes
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "${{ github.run_attempt }}" -gt 1 ]; then
             echo "should_build=true" >> $GITHUB_OUTPUT
-            echo "Manual trigger - building ${{ matrix.name }} for ${{ matrix.platform }}"
+            if [ "${{ github.run_attempt }}" -gt 1 ]; then
+              echo "Workflow restarted (attempt ${{ github.run_attempt }}) - building ${{ matrix.name }} for ${{ matrix.platform }}"
+            else
+              echo "Manual trigger - building ${{ matrix.name }} for ${{ matrix.platform }}"
+            fi
           else
             case "${{ matrix.changes-output }}" in
               control-panel)
@@ -163,9 +167,13 @@ jobs:
       - name: Check for changes
         id: changes
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "${{ github.run_attempt }}" -gt 1 ]; then
             echo "should_build=true" >> $GITHUB_OUTPUT
-            echo "Manual trigger - creating manifest for ${{ matrix.name }}"
+            if [ "${{ github.run_attempt }}" -gt 1 ]; then
+              echo "Workflow restarted (attempt ${{ github.run_attempt }}) - creating manifest for ${{ matrix.name }}"
+            else
+              echo "Manual trigger - creating manifest for ${{ matrix.name }}"
+            fi
           else
             case "${{ matrix.changes-output }}" in
               control-panel)
