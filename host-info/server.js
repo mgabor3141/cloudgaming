@@ -2,12 +2,8 @@ import express from 'express';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import os from 'os';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
 
 const execAsync = promisify(exec);
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -383,6 +379,10 @@ setInterval(collectMetrics, 10000);
 
 // Collect initial metrics
 collectMetrics().catch(console.error);
+
+// Handle SIGINT (Ctrl+C) and SIGTERM
+process.on('SIGINT', () => process.exit(0));
+process.on('SIGTERM', () => process.exit(0));
 
 app.listen(PORT, () => {
   console.log(`Host Info server running on http://localhost:${PORT}`);

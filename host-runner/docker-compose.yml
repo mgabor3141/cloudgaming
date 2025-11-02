@@ -2,7 +2,10 @@ services:
   wolf:
     image: ghcr.io/games-on-whales/wolf:stable
     container_name: wolf
-    network_mode: host
+    network_mode: service:tailscale
+    depends_on:
+      tailscale:
+        condition: service_healthy
     restart: unless-stopped
     
     environment:
@@ -65,15 +68,16 @@ services:
     ports:
       - "${HOST_INFO_PORT:-3001}:${HOST_INFO_PORT:-3001}"
     
-    volumes:
-      # Access to GPU utilities (nvidia-smi)
-      - /usr/bin/nvidia-smi:/usr/bin/nvidia-smi:ro
-      - /usr/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:ro
-    
-    devices:
-      # GPU access for nvidia-smi
-      - /dev/nvidiactl
-      - /dev/nvidia0
+    # Use NVIDIA Container Toolkit for GPU access
+    # This automatically handles nvidia-smi and required libraries
+    # Requires: sudo apt-get install nvidia-container-toolkit && sudo systemctl restart docker
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
 
   idle-inhibitor:
     image: ghcr.io/mgabor3141/cloudgaming/idle-inhibitor:latest
@@ -111,8 +115,13 @@ services:
     image: tailscale/tailscale:latest
     container_name: tailscale
     hostname: ${TAILSCALE_HOSTNAME:-cloudgaming}
-    network_mode: host
     restart: unless-stopped
+    attach: false # Don't output to console
+    healthcheck:
+      test: ["CMD", "tailscale", "status"]
+      interval: 5s
+      timeout: 5s
+      retries: 3
     
     environment:
       - TS_AUTHKEY=${TS_AUTHKEY}
