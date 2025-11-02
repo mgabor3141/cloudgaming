@@ -1,5 +1,9 @@
 FROM nvidia/cuda:12.0.0-base-ubuntu22.04
 
+# Label to link package to GitHub repository
+ARG GITHUB_REPO_URL
+LABEL org.opencontainers.image.source="${GITHUB_REPO_URL}"
+
 # Install Node.js and nvidia-smi dependencies
 RUN apt-get update && apt-get install -y \
     curl \
@@ -14,7 +18,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies
-RUN npm ci --only=production
+RUN npm install --omit=dev
 
 # Copy application files
 COPY server.js ./

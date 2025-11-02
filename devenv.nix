@@ -2,7 +2,7 @@
 
 {
   # https://devenv.sh/basics/
-  env.GREET = "devenv";
+  env.GREET = "cloudgaming";
 
   # https://devenv.sh/packages/
   packages = [
@@ -22,13 +22,64 @@
   # services.postgres.enable = true;
 
   # https://devenv.sh/scripts/
-  scripts = {
-    hello = {
+  scripts = let
+    # Define services list - add new services here to auto-generate scripts
+    services = [ "control-panel" "host-info" ];
+    
+    # Helper function to create docker-push script for a service
+    makeDockerPushScript = service: {
+      description = "Build and push ${service} to GitHub Container Registry";
       exec = ''
-        npm install
-        echo hello from $GREET
+        set -e
+        if [ -z "$GITHUB_USER" ]; then
+          echo "Error: GITHUB_USER environment variable is not set"
+          echo "Example: export GITHUB_USER=yourusername"
+          exit 1
+        fi
+        
+        REPO_NAME="''${GITHUB_REPO:-cloudgaming}"
+        IMAGE_NAME="ghcr.io/$GITHUB_USER/$REPO_NAME/${service}"
+        
+        # Try to get repository URL from git remote, fallback to constructed URL
+        GITHUB_REPO_URL="''${GITHUB_REPO_URL:-}"
+        if [ -z "$GITHUB_REPO_URL" ]; then
+          GIT_REMOTE=$(git remote get-url origin 2>/dev/null || echo "")
+          if [ -n "$GIT_REMOTE" ]; then
+            # Convert git remote URL to GitHub web URL and remove .git suffix
+            GITHUB_REPO_URL=$(echo "$GIT_REMOTE" | sed -E 's|^git@github.com:(.+)$|https://github.com/\1|' | sed -E 's|^https://github.com/(.+)$|https://github.com/\1|' | sed 's|\.git$||')
+          else
+            # Fallback to constructed URL
+            GITHUB_REPO_URL="https://github.com/$GITHUB_USER/$REPO_NAME"
+          fi
+        fi
+        
+        echo "Building and pushing ${service} for multiple architectures..."
+        cd ${service}
+        docker buildx build --platform linux/amd64,linux/arm64 --build-arg GITHUB_REPO_URL="$GITHUB_REPO_URL" -t "$IMAGE_NAME:dev" --push .
+        
+        echo "Successfully pushed ${service}"
       '';
     };
+    
+    # Helper function to create docker-build script for a service
+    makeDockerBuildScript = service: {
+      description = "Build ${service} Docker image";
+      exec = ''
+        cd ${service}
+        docker buildx build -t ${service}:latest --load .
+      '';
+    };
+    
+    # Generate docker-build scripts for each service
+    dockerBuildScripts = lib.genAttrs (map (s: "docker-build-${lib.strings.replaceStrings ["-"] ["_"] s}") services)
+      (name: let service = lib.strings.replaceStrings ["docker-build-"] [""] (lib.strings.replaceStrings ["_"] ["-"] name); in
+        makeDockerBuildScript service);
+    
+    # Generate docker-push scripts for each service  
+    dockerPushScripts = lib.genAttrs (map (s: "docker-push-${lib.strings.replaceStrings ["-"] ["_"] s}") services)
+      (name: let service = lib.strings.replaceStrings ["docker-push-"] [""] (lib.strings.replaceStrings ["_"] ["-"] name); in
+        makeDockerPushScript service);
+  in {
     cpanel = {
       description = "Start the control-panel development server";
       exec = "npm run dev -w control-panel";
@@ -38,86 +89,14 @@
       exec = "npm run dev -w host-info";
     };
     
-    # Docker build scripts
-    docker-build-control-panel = {
-      description = "Build control-panel Docker image";
-      exec = ''
-        cd control-panel
-        docker build -t control-panel:latest .
-      '';
-    };
-    
-    docker-build-host-info = {
-      description = "Build host-info Docker image";
-      exec = ''
-        cd host-info
-        docker build -t host-info:latest .
-      '';
-    };
-    
     docker-build = {
       description = "Build all Docker images";
       exec = ''
-        echo "Building control-panel..."
-        cd control-panel && docker build -t control-panel:latest . && cd ..
-        echo "Building host-info..."
-        cd host-info && docker build -t host-info:latest . && cd ..
+        ${lib.concatMapStringsSep "\n" (service: ''
+          echo "Building ${service}..."
+          cd ${service} && docker buildx build -t ${service}:latest --load . && cd ..
+        '') services}
         echo "All images built successfully"
-      '';
-    };
-    
-    # Docker push scripts for GitHub Container Registry
-    docker-push-control-panel = {
-      description = "Build and push control-panel to GitHub Container Registry";
-      exec = ''
-        set -e
-        if [ -z "$GITHUB_USER" ]; then
-          echo "Error: GITHUB_USER environment variable is not set"
-          echo "Example: export GITHUB_USER=yourusername"
-          exit 1
-        fi
-        
-        REPO_NAME="''${GITHUB_REPO:-cloudgaming}"
-        IMAGE_NAME="ghcr.io/$GITHUB_USER/$REPO_NAME/control-panel"
-        
-        echo "Building control-panel..."
-        cd control-panel
-        docker build -t "$IMAGE_NAME:latest" -t "$IMAGE_NAME:$GITHUB_SHA" .
-        
-        echo "Pushing to $IMAGE_NAME..."
-        docker push "$IMAGE_NAME:latest"
-        if [ -n "$GITHUB_SHA" ]; then
-          docker push "$IMAGE_NAME:$GITHUB_SHA"
-        fi
-        
-        echo "Successfully pushed control-panel"
-      '';
-    };
-    
-    docker-push-host-info = {
-      description = "Build and push host-info to GitHub Container Registry";
-      exec = ''
-        set -e
-        if [ -z "$GITHUB_USER" ]; then
-          echo "Error: GITHUB_USER environment variable is not set"
-          echo "Example: export GITHUB_USER=yourusername"
-          exit 1
-        fi
-        
-        REPO_NAME="''${GITHUB_REPO:-cloudgaming}"
-        IMAGE_NAME="ghcr.io/$GITHUB_USER/$REPO_NAME/host-info"
-        
-        echo "Building host-info..."
-        cd host-info
-        docker build -t "$IMAGE_NAME:latest" -t "$IMAGE_NAME:$GITHUB_SHA" .
-        
-        echo "Pushing to $IMAGE_NAME..."
-        docker push "$IMAGE_NAME:latest"
-        if [ -n "$GITHUB_SHA" ]; then
-          docker push "$IMAGE_NAME:$GITHUB_SHA"
-        fi
-        
-        echo "Successfully pushed host-info"
       '';
     };
     
@@ -132,8 +111,7 @@
         fi
         
         echo "Building and pushing all images..."
-        devenv docker-push-control-panel
-        devenv docker-push-host-info
+        ${lib.concatMapStringsSep "\n" (service: "docker-push-${lib.strings.replaceStrings ["-"] ["_"] service}") services}
         echo "All images pushed successfully"
       '';
     };
@@ -152,12 +130,15 @@
         echo "Logged in to GitHub Container Registry"
       '';
     };
-  };
+  } // dockerBuildScripts // dockerPushScripts;
 
   # https://devenv.sh/basics/
   enterShell = ''
-    hello         # Run scripts directly
-    git --version # Use packages
+    npm install
+    ${pkgs.util-linuxMinimal}/bin/column -t -s = <<EOF
+    ${lib.generators.toKeyValue {} (lib.mapAttrs (name: value: value.description) config.scripts)}
+    EOF
+    echo -e "\nHello from $GREET"
   '';
 
   # https://devenv.sh/tasks/

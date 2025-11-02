@@ -1,12 +1,16 @@
 FROM node:20-alpine
 
+# Label to link package to GitHub repository
+ARG GITHUB_REPO_URL
+LABEL org.opencontainers.image.source="${GITHUB_REPO_URL}"
+
 WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
 
 # Install dependencies
-RUN npm ci --only=production
+RUN npm install --omit=dev
 
 # Copy application files
 COPY server.js ./
