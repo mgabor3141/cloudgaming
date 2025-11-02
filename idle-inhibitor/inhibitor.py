@@ -6,8 +6,7 @@ Subscribes to a Wolf (or other) SSE event stream and maintains a systemd
 idle inhibitor lock while events are flowing. Releases the lock after a
 configurable idle period.
 
-Uses D-Bus to communicate with systemd-logind, which is more reliable than
-shelling out to systemd-inhibit, especially from a container.
+Uses systemd-inhibit command which is the most reliable method from containers.
 """
 
 import os
@@ -16,18 +15,16 @@ import time
 import signal
 import logging
 import threading
+import subprocess
 from typing import Optional
-from contextlib import contextmanager
 
 import requests
-from dasbus.connection import SystemMessageBus
-from dasbus.identifier import DBusServiceIdentifier
 
 # Configuration from environment
 SSE_URL = os.getenv("SSE_URL", "http://localhost/api/v1/events")
 UNIX_SOCKET = os.getenv("UNIX_SOCKET", "/var/run/wolf/wolf.sock")
 IDLE_TIMEOUT = int(os.getenv("IDLE_TIMEOUT", "300"))  # 5 minutes default
-WHAT = os.getenv("WHAT", "sleep:idle")  # What to inhibit
+WHAT = os.getenv("WHAT", "idle:sleep")  # What to inhibit
 WHY = os.getenv("WHY", "Wolf streaming session active")  # Reason
 RECONNECT_DELAY = int(os.getenv("RECONNECT_DELAY", "5"))
 
@@ -41,60 +38,97 @@ logger = logging.getLogger(__name__)
 
 
 class IdleInhibitor:
-    """Manages systemd-logind inhibitor lock via D-Bus"""
+    """Manages systemd-logind inhibitor lock via systemd-inhibit command"""
     
-    # D-Bus constants for systemd-logind
-    LOGIND_SERVICE = "org.freedesktop.login1"
-    LOGIND_PATH = "/org/freedesktop/login1"
-    LOGIND_INTERFACE = "org.freedesktop.login1.Manager"
-    
-    def __init__(self, what: str = "sleep:idle", why: str = "Active session"):
+    def __init__(self, what: str = "idle:sleep", why: str = "Active session"):
         self.what = what
         self.why = why
         self.who = "idle-inhibitor"
-        self.mode = "block"
-        self.fd: Optional[int] = None
-        self.bus = SystemMessageBus()
+        self.process: Optional[subprocess.Popen] = None
         self.lock = threading.Lock()
         
     def acquire(self) -> bool:
-        """Acquire an inhibitor lock"""
+        """Acquire an inhibitor lock by spawning systemd-inhibit process"""
         with self.lock:
-            if self.fd is not None:
+            if self.process is not None:
                 return True  # Already held
                 
             try:
-                proxy = self.bus.get_proxy(
-                    self.LOGIND_SERVICE,
-                    self.LOGIND_PATH
+                # Use systemd-inhibit to run a sleep command that we can keep alive
+                # The lock is held as long as the process runs
+                cmd = [
+                    'systemd-inhibit',
+                    f'--what={self.what}',
+                    f'--who={self.who}',
+                    f'--why={self.why}',
+                    '--mode=block',
+                    'sleep', 'infinity'
+                ]
+                
+                logger.info(f"Acquiring inhibitor lock: {' '.join(cmd)}")
+                
+                # Start the process
+                self.process = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    stdin=subprocess.DEVNULL
                 )
                 
-                # Call Inhibit method
-                # Returns a file descriptor that holds the lock
-                self.fd = proxy.Inhibit(self.what, self.who, self.why, self.mode)
-                logger.info(f"Acquired inhibitor lock (fd={self.fd})")
+                # Give it a moment to start and check if it's still running
+                time.sleep(0.1)
+                if self.process.poll() is not None:
+                    # Process died immediately
+                    stdout, stderr = self.process.communicate()
+                    logger.error(f"systemd-inhibit failed to start:")
+                    logger.error(f"stdout: {stdout.decode()}")
+                    logger.error(f"stderr: {stderr.decode()}")
+                    self.process = None
+                    return False
+                
+                logger.info(f"Acquired inhibitor lock (pid={self.process.pid})")
                 return True
                 
             except Exception as e:
-                logger.error(f"Failed to acquire inhibitor: {e}")
+                logger.error(f"Failed to acquire inhibitor: {e}", exc_info=True)
+                self.process = None
                 return False
     
     def release(self):
-        """Release the inhibitor lock"""
+        """Release the inhibitor lock by terminating the process"""
         with self.lock:
-            if self.fd is not None:
+            if self.process is not None:
                 try:
-                    os.close(self.fd)
+                    logger.info(f"Releasing inhibitor lock (pid={self.process.pid})")
+                    self.process.terminate()
+                    
+                    # Wait for it to exit (with timeout)
+                    try:
+                        self.process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        logger.warning("Process didn't terminate, killing it")
+                        self.process.kill()
+                        self.process.wait()
+                    
                     logger.info("Released inhibitor lock")
                 except Exception as e:
                     logger.error(f"Error releasing inhibitor: {e}")
                 finally:
-                    self.fd = None
+                    self.process = None
     
     def is_held(self) -> bool:
         """Check if lock is currently held"""
         with self.lock:
-            return self.fd is not None
+            if self.process is None:
+                return False
+            
+            # Check if process is still running
+            if self.process.poll() is not None:
+                logger.warning("Inhibitor process died unexpectedly")
+                self.process = None
+                return False
+            
+            return True
 
 
 class SSEMonitor:
@@ -163,12 +197,16 @@ class SSEMonitor:
             # Create session with Unix socket if specified
             session = requests.Session()
             if UNIX_SOCKET:
-                from requests_unixsocket import Session as UnixSession
-                session = UnixSession()
-                # Encode socket path for URL
-                import urllib.parse
-                socket_encoded = urllib.parse.quote(UNIX_SOCKET, safe='')
-                url = f"http+unix://{socket_encoded}{SSE_URL.replace('http://localhost', '')}"
+                try:
+                    from requests_unixsocket import Session as UnixSession
+                    session = UnixSession()
+                    # Encode socket path for URL
+                    import urllib.parse
+                    socket_encoded = urllib.parse.quote(UNIX_SOCKET, safe='')
+                    url = f"http+unix://{socket_encoded}{SSE_URL.replace('http://localhost', '')}"
+                except ImportError:
+                    logger.warning("requests-unixsocket not available, using HTTP")
+                    url = SSE_URL
             else:
                 url = SSE_URL
             
@@ -202,7 +240,7 @@ class SSEMonitor:
             logger.error(f"Connection error: {e}")
             return False
         except Exception as e:
-            logger.error(f"Unexpected error: {e}")
+            logger.error(f"Unexpected error: {e}", exc_info=True)
             return False
     
     def stop(self):
@@ -214,7 +252,8 @@ class SSEMonitor:
 def signal_handler(signum, frame):
     """Handle shutdown signals"""
     logger.info(f"Received signal {signum}, shutting down...")
-    sys.exit(0)
+    # Don't call sys.exit here, let main() handle cleanup
+    raise KeyboardInterrupt
 
 
 def main():
@@ -224,6 +263,23 @@ def main():
     logger.info(f"Unix Socket: {UNIX_SOCKET if UNIX_SOCKET else 'None'}")
     logger.info(f"Idle Timeout: {IDLE_TIMEOUT}s")
     logger.info(f"Inhibit: {WHAT}")
+    logger.info(f"Reason: {WHY}")
+    
+    # Check if systemd-inhibit is available
+    try:
+        result = subprocess.run(
+            ['systemd-inhibit', '--version'],
+            capture_output=True,
+            timeout=5
+        )
+        if result.returncode != 0:
+            logger.error("systemd-inhibit command not available or not working")
+            logger.error(f"stderr: {result.stderr.decode()}")
+            sys.exit(1)
+        logger.info(f"systemd version: {result.stdout.decode().split()[0]}")
+    except Exception as e:
+        logger.error(f"Failed to check systemd-inhibit availability: {e}")
+        sys.exit(1)
     
     # Setup signal handlers
     signal.signal(signal.SIGINT, signal_handler)
@@ -255,4 +311,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

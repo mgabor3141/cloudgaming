@@ -80,6 +80,8 @@ services:
     image: ghcr.io/mgabor3141/cloudgaming/idle-inhibitor:latest
     container_name: idle-inhibitor
     restart: unless-stopped
+    # Needed for systemd-inhibit to communicate with host
+    privileged: true
     
     environment:
       # SSE endpoint configuration
@@ -89,7 +91,7 @@ services:
       # Idle timeout in seconds (default: 5 minutes)
       - IDLE_TIMEOUT=${IDLE_TIMEOUT:-300}
       
-      # What to inhibit (systemd-logind format)
+      # What to inhibit (colon-separated: idle, sleep, shutdown, handle-power-key, etc.)
       - WHAT=${INHIBIT_WHAT:-sleep}
       
       # Reason shown in systemd-inhibit --list
@@ -97,13 +99,16 @@ services:
       
       # Reconnection delay in seconds
       - RECONNECT_DELAY=${RECONNECT_DELAY:-5}
+      
+      # Force systemctl to use D-Bus
+      - SYSTEMCTL_FORCE_BUS=1
     
     volumes:
       # Access to wolf socket
       - /var/run/wolf:/var/run/wolf:ro
       
-      # D-Bus for systemd-logind communication
-      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket:ro
+      # Full /run access for systemd-inhibit to work from container
+      - /run:/run:ro
     
     depends_on:
       - wolf
