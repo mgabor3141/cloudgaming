@@ -13,6 +13,7 @@ A [Games on Whales](https://games-on-whales.github.io/) deployment with remote w
   - Remotely wake the PC if needed
 - Wolf deployment
   - System sleep prevention if a client is active
+  - Bundled Tailscale access
 
 ## Deployment
 
