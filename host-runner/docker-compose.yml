@@ -2,10 +2,7 @@ services:
   wolf:
     image: ghcr.io/games-on-whales/wolf:stable
     container_name: wolf
-    network_mode: service:tailscale
-    depends_on:
-      tailscale:
-        condition: service_healthy
+    network_mode: host
     restart: unless-stopped
     
     environment:
@@ -42,7 +39,7 @@ services:
       - /dev/nvidiactl
       - /dev/nvidia0
       - /dev/nvidia-modeset
-      
+    
       # DRI for GPU access
       - /dev/dri
       
@@ -52,7 +49,7 @@ services:
     
     device_cgroup_rules:
       - "c 13:* rmw"  # Input devices
-
+    
   host-info:
     image: ghcr.io/mgabor3141/cloudgaming/host-info:latest
     container_name: host-info
@@ -116,6 +113,7 @@ services:
     container_name: tailscale
     hostname: ${TAILSCALE_HOSTNAME:-cloudgaming}
     restart: unless-stopped
+    network_mode: host
     attach: false # Don't output to console
     healthcheck:
       test: ["CMD", "tailscale", "status"]
@@ -130,14 +128,7 @@ services:
     volumes:
       # Tailscale state directory
       - tailscale-state:/var/lib/tailscale
-      
-      # TUN device for VPN
-      - /dev/net/tun:/dev/net/tun
     
-    cap_add:
-      - NET_ADMIN
-      - SYS_MODULE
-
 volumes:
   # NVIDIA driver volume (should be created externally if needed)
   nvidia-driver-vol:
