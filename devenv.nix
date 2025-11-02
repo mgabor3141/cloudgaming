@@ -14,6 +14,17 @@
 
   # https://devenv.sh/languages/
   languages.javascript.enable = true;
+  languages.python = {
+    enable = true;
+    venv = {
+      enable = true;
+      requirements = ''
+        requests>=2.31.0
+        requests-unixsocket>=0.3.0
+        dasbus>=1.7
+      '';
+    };
+  };
 
   # https://devenv.sh/processes/
   # processes.dev.exec = "${lib.getExe pkgs.watchexec} -n -- ls -la";
@@ -24,7 +35,7 @@
   # https://devenv.sh/scripts/
   scripts = let
     # Define services list - add new services here to auto-generate scripts
-    services = [ "control-panel" "host-info" ];
+    services = [ "control-panel" "host-info" "idle-inhibitor" ];
     
     # Helper function to create docker-push script for a service
     makeDockerPushScript = service: {
@@ -87,6 +98,14 @@
     hostinfo = {
       description = "Start the host-info development server";
       exec = "npm run dev -w host-info";
+    };
+    
+    idle-inhibitor-dev = {
+      description = "Run idle-inhibitor locally";
+      exec = ''
+        cd idle-inhibitor
+        python3 inhibitor.py
+      '';
     };
     
     docker-build = {

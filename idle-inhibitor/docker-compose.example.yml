@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  idle-inhibitor:
+    build: .
+    restart: unless-stopped
+    environment:
+      - SSE_URL=http://localhost/api/v1/events
+      - UNIX_SOCKET=/var/run/wolf/wolf.sock
+      - IDLE_TIMEOUT=300
+      - WHAT=sleep:idle
+      - WHY=Wolf streaming session active
+      - RECONNECT_DELAY=5
+    volumes:
+      # Required: D-Bus system socket for systemd-logind access
+      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket:ro
+      # Required if using Unix socket: Wolf socket directory
+      - /var/run/wolf:/var/run/wolf:ro
+    # Optional: Use host network if needed
+    # network_mode: host
+
