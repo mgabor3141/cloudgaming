@@ -1,0 +1,145 @@
+version: '3.8'
+
+services:
+  wolf:
+    image: ghcr.io/games-on-whales/wolf:stable
+    container_name: wolf
+    network_mode: host
+    restart: unless-stopped
+    
+    environment:
+      # NVIDIA driver configuration
+      - NVIDIA_DRIVER_VOLUME_NAME=nvidia-driver-vol
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - NVIDIA_VISIBLE_DEVICES=all
+      
+      # Wolf configuration
+      - WOLF_INTERNAL_MAC=${WOLF_INTERNAL_MAC:-b4:2e:99:49:49:f0}
+      - WOLF_SOCKET_PATH=/var/run/wolf/wolf.sock
+    
+    volumes:
+      # NVIDIA driver volume
+      - nvidia-driver-vol:/usr/nvidia:rw
+      
+      # Wolf configuration
+      - /etc/wolf:/etc/wolf:rw
+      
+      # Docker socket for container management
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+      
+      # Wolf socket directory
+      - /var/run/wolf:/var/run/wolf:rw
+      
+      # Device access
+      - /dev/:/dev/:rw
+      - /run/udev:/run/udev:rw
+    
+    devices:
+      # NVIDIA GPU devices
+      - /dev/nvidia-uvm
+      - /dev/nvidia-uvm-tools
+      - /dev/nvidia-caps/nvidia-cap1
+      - /dev/nvidia-caps/nvidia-cap2
+      - /dev/nvidiactl
+      - /dev/nvidia0
+      - /dev/nvidia-modeset
+      
+      # DRI for GPU access
+      - /dev/dri
+      
+      # Input devices
+      - /dev/uinput
+      - /dev/uhid
+    
+    device_cgroup_rules:
+      - "c 13:* rmw"  # Input devices
+
+  host-info:
+    image: ghcr.io/mgabor3141/cloudgaming/host-info:dev
+    container_name: host-info
+    restart: unless-stopped
+    
+    environment:
+      - PORT=${HOST_INFO_PORT:-3001}
+      - GPU_UTIL_THRESHOLD=${GPU_UTIL_THRESHOLD:-50}
+      - GPU_MEM_THRESHOLD=${GPU_MEM_THRESHOLD:-25}
+      - CPU_UTIL_THRESHOLD=${CPU_UTIL_THRESHOLD:-60}
+      - BUSY_THRESHOLD_PERCENT=${BUSY_THRESHOLD_PERCENT:-60}
+    
+    ports:
+      - "${HOST_INFO_PORT:-3001}:${HOST_INFO_PORT:-3001}"
+    
+    volumes:
+      # Access to GPU utilities (nvidia-smi)
+      - /usr/bin/nvidia-smi:/usr/bin/nvidia-smi:ro
+      - /usr/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:ro
+    
+    devices:
+      # GPU access for nvidia-smi
+      - /dev/nvidiactl
+      - /dev/nvidia0
+
+  idle-inhibitor:
+    image: ghcr.io/mgabor3141/cloudgaming/idle-inhibitor:dev
+    container_name: idle-inhibitor
+    restart: unless-stopped
+    
+    environment:
+      # SSE endpoint configuration
+      - SSE_URL=${SSE_URL:-http://localhost/api/v1/events}
+      - UNIX_SOCKET=/var/run/wolf/wolf.sock
+      
+      # Idle timeout in seconds (default: 5 minutes)
+      - IDLE_TIMEOUT=${IDLE_TIMEOUT:-300}
+      
+      # What to inhibit (systemd-logind format)
+      - WHAT=${INHIBIT_WHAT:-sleep:idle}
+      
+      # Reason shown in systemd-inhibit --list
+      - WHY=${INHIBIT_WHY:-Wolf streaming session active}
+      
+      # Reconnection delay in seconds
+      - RECONNECT_DELAY=${RECONNECT_DELAY:-5}
+    
+    volumes:
+      # Access to wolf socket
+      - /var/run/wolf:/var/run/wolf:ro
+      
+      # D-Bus for systemd-logind communication
+      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket:ro
+    
+    depends_on:
+      - wolf
+
+  tailscale:
+    image: tailscale/tailscale:latest
+    container_name: tailscale
+    hostname: ${TAILSCALE_HOSTNAME:-cloudgaming-host}
+    network_mode: host
+    restart: unless-stopped
+    
+    environment:
+      - TS_AUTHKEY=${TS_AUTHKEY}
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_SOCKET=/var/run/tailscale/tailscaled.sock
+      - TS_EXTRA_ARGS=${TS_EXTRA_ARGS:---advertise-exit-node}
+    
+    volumes:
+      # Tailscale state directory
+      - tailscale-state:/var/lib/tailscale
+      
+      # TUN device for VPN
+      - /dev/net/tun:/dev/net/tun
+    
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+
+volumes:
+  # NVIDIA driver volume (should be created externally if needed)
+  nvidia-driver-vol:
+    external: true
+  
+  # Tailscale state
+  tailscale-state:
+
