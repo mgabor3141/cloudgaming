@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   wolf:
     image: ghcr.io/games-on-whales/wolf:stable
@@ -12,7 +10,7 @@ services:
       - NVIDIA_DRIVER_VOLUME_NAME=nvidia-driver-vol
 
       # Wolf configuration
-      - WOLF_INTERNAL_MAC=${WOLF_INTERNAL_MAC:-b4:2e:99:49:49:f0}
+      - WOLF_INTERNAL_MAC=${WOLF_INTERNAL_MAC}
       - WOLF_SOCKET_PATH=/var/run/wolf/wolf.sock
     
     volumes:
@@ -53,7 +51,7 @@ services:
       - "c 13:* rmw"  # Input devices
 
   host-info:
-    image: ghcr.io/mgabor3141/cloudgaming/host-info:dev
+    image: ghcr.io/mgabor3141/cloudgaming/host-info:latest
     container_name: host-info
     restart: unless-stopped
     
@@ -78,7 +76,7 @@ services:
       - /dev/nvidia0
 
   idle-inhibitor:
-    image: ghcr.io/mgabor3141/cloudgaming/idle-inhibitor:dev
+    image: ghcr.io/mgabor3141/cloudgaming/idle-inhibitor:latest
     container_name: idle-inhibitor
     restart: unless-stopped
     
@@ -91,7 +89,7 @@ services:
       - IDLE_TIMEOUT=${IDLE_TIMEOUT:-300}
       
       # What to inhibit (systemd-logind format)
-      - WHAT=${INHIBIT_WHAT:-sleep:idle}
+      - WHAT=${INHIBIT_WHAT:-sleep}
       
       # Reason shown in systemd-inhibit --list
       - WHY=${INHIBIT_WHY:-Wolf streaming session active}
@@ -112,15 +110,13 @@ services:
   tailscale:
     image: tailscale/tailscale:latest
     container_name: tailscale
-    hostname: ${TAILSCALE_HOSTNAME:-cloudgaming-host}
+    hostname: ${TAILSCALE_HOSTNAME:-cloudgaming}
     network_mode: host
     restart: unless-stopped
     
     environment:
       - TS_AUTHKEY=${TS_AUTHKEY}
       - TS_STATE_DIR=/var/lib/tailscale
-      - TS_SOCKET=/var/run/tailscale/tailscaled.sock
-      - TS_EXTRA_ARGS=${TS_EXTRA_ARGS:---advertise-exit-node}
     
     volumes:
       # Tailscale state directory
