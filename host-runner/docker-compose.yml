@@ -10,9 +10,7 @@ services:
     environment:
       # NVIDIA driver configuration
       - NVIDIA_DRIVER_VOLUME_NAME=nvidia-driver-vol
-      - NVIDIA_DRIVER_CAPABILITIES=all
-      - NVIDIA_VISIBLE_DEVICES=all
-      
+
       # Wolf configuration
       - WOLF_INTERNAL_MAC=${WOLF_INTERNAL_MAC:-b4:2e:99:49:49:f0}
       - WOLF_SOCKET_PATH=/var/run/wolf/wolf.sock

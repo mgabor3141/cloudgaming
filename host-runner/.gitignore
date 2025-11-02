@@ -1,6 +1,0 @@
-# Environment configuration
-.env
-
-# Docker Compose override
-docker-compose.override.yml
-

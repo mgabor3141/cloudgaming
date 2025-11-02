@@ -1,7 +1,0 @@
-.env
-.env.example
-*.md
-reference/
-.git
-.gitignore
-
