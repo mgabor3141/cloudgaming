@@ -1,25 +1,34 @@
 FROM python:3.11-slim
 
-# Install system dependencies for D-Bus
+# Install build dependencies, compile PyGObject, then clean up to reduce image size
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        gcc \
+        pkg-config \
+        libgirepository1.0-dev \
+        libcairo2-dev \
+    && pip install --no-cache-dir 'PyGObject<3.46' \
+    && apt-get purge -y --auto-remove gcc pkg-config libgirepository1.0-dev libcairo2-dev \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Install runtime dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         dbus \
-        libdbus-1-3 \
-        libdbus-glib-1-2 \
+        libgirepository-1.0-1 \
+        libcairo2 \
+        gir1.2-glib-2.0 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy requirements and install Python dependencies
+# Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application
 COPY inhibitor.py .
 RUN chmod +x inhibitor.py
-
-# Run as non-root user (but needs access to D-Bus socket)
-USER nobody
 
 ENTRYPOINT ["python3", "-u", "inhibitor.py"]
 

@@ -8,6 +8,8 @@
   packages = [
     pkgs.git
     pkgs.docker
+    pkgs.python3Packages.pygobject3
+    pkgs.gobject-introspection
   ];
 
   dotenv.enable = true;
