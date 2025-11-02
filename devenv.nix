@@ -66,11 +66,39 @@
           fi
         fi
         
-        echo "Building and pushing ${service} for multiple architectures..."
         cd ${service}
-        docker buildx build --platform linux/amd64,linux/arm64 --build-arg GITHUB_REPO_URL="$GITHUB_REPO_URL" -t "$IMAGE_NAME:dev" --push .
         
-        echo "Successfully pushed ${service}"
+        # Check if buildx is available and supports multi-platform builds
+        USE_BUILDX=false
+        if docker buildx version >/dev/null 2>&1 && docker buildx ls >/dev/null 2>&1; then
+          # Check if there's a builder that supports multi-platform
+          if docker buildx inspect --builder default >/dev/null 2>&1 || docker buildx inspect >/dev/null 2>&1; then
+            USE_BUILDX=true
+          fi
+        fi
+        
+        if [ "$USE_BUILDX" = "true" ]; then
+          echo "Building and pushing ${service} for multiple architectures with buildx..."
+          if docker buildx build --platform linux/amd64,linux/arm64 --build-arg GITHUB_REPO_URL="$GITHUB_REPO_URL" -t "$IMAGE_NAME:dev" --push . 2>&1; then
+            echo "Successfully pushed ${service} (multi-platform)"
+            cd ..
+          else
+            echo "Warning: Multi-platform build failed, falling back to single-platform build..."
+            # Fallback to single-platform build
+            echo "Building and pushing ${service} for current architecture..."
+            docker build --build-arg GITHUB_REPO_URL="$GITHUB_REPO_URL" -t "$IMAGE_NAME:dev" .
+            docker push "$IMAGE_NAME:dev"
+            echo "Successfully pushed ${service} (single-platform)"
+            cd ..
+          fi
+        else
+          # Fallback to single-platform build
+          echo "Building and pushing ${service} for current architecture..."
+          docker build --build-arg GITHUB_REPO_URL="$GITHUB_REPO_URL" -t "$IMAGE_NAME:dev" .
+          docker push "$IMAGE_NAME:dev"
+          echo "Successfully pushed ${service} (single-platform)"
+          cd ..
+        fi
       '';
     };
     
@@ -79,7 +107,12 @@
       description = "Build ${service} Docker image";
       exec = ''
         cd ${service}
-        docker buildx build -t ${service}:latest --load .
+        # Try buildx first, fall back to regular docker build
+        if docker buildx version >/dev/null 2>&1; then
+          docker buildx build -t ${service}:latest --load . || docker build -t ${service}:latest .
+        else
+          docker build -t ${service}:latest .
+        fi
       '';
     };
     
@@ -115,7 +148,14 @@
       exec = ''
         ${lib.concatMapStringsSep "\n" (service: ''
           echo "Building ${service}..."
-          cd ${service} && docker buildx build -t ${service}:latest --load . && cd ..
+          cd ${service}
+          # Try buildx first, fall back to regular docker build
+          if docker buildx version >/dev/null 2>&1; then
+            docker buildx build -t ${service}:latest --load . || docker build -t ${service}:latest .
+          else
+            docker build -t ${service}:latest .
+          fi
+          cd ..
         '') services}
         echo "All images built successfully"
       '';
