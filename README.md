@@ -11,7 +11,7 @@ A [Games on Whales](https://games-on-whales.github.io/) deployment with remote w
   - Utilization display, so that you can tell if the PC is free
   - Get notified when it becomes free
   - Remotely wake the PC if needed
-- Wolf depoloyment
+- Wolf deployment
   - System sleep prevention if a client is active
 
 ## Deployment
